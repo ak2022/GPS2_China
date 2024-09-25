@@ -1,0 +1,248 @@
+---
+title: "China Analysis"
+output: html_document
+date: "2024-05-11"
+purpose: Creating the figures and statistics needed for the Suzhou analysis paper. 
+---
+## Load input data
+Loading in our data, tidying it, and adding the PCV information as needed. 
+```{r load_dataset_1}
+# Load packages for R
+install.packages("tidyverse")
+install.packages("ggpattern")
+library(tidyverse)
+library(ggpattern)
+
+# Load input data
+data_frame <- read.csv("cpra-merged-qc-pass-with-colours.csv")
+
+# Change blank GPSCs and fix serotype nomenclature
+data_frame[which(data_frame$GPSC == "_"), "GPSC"] <- "Others"
+data_frame[which(data_frame$Serotype == "6E(6B)"), "Serotype"] <- "6B"
+data_frame[which(is.na(data_frame$Age_years)), "Age_years"] <- "0"
+
+# Add vaccine information to a single column
+data_frame$Type <- ifelse(data_frame$Serotype == "1" | data_frame$Serotype == "5" | data_frame$Serotype == "6B" | data_frame$Serotype == "7F" | data_frame$Serotype == "9V" | data_frame$Serotype == "14" | data_frame$Serotype == "19F" | data_frame$Serotype == "23F", "All", ifelse(data_frame$Serotype == "18C" | data_frame$Serotype == "4", "PCV10 (GSK) and PCV13", ifelse(data_frame$Serotype == "6A" | data_frame$Serotype == "19A", "PCV10 (SII) and PCV13", ifelse(data_frame$Serotype == "3", "PCV13 Only", "NVT"))))
+
+# Add IPD or non-IPD status based on the clinical manifestation
+data_frame$Category <- ifelse(data_frame$Clinical_manifestation == "Otitis media" | data_frame$Source == "Eye discharge" | data_frame$Clinical_manifestation == "Pneumonia" | data_frame$Clinical_manifestation == "UTI" | data_frame$Clinical_manifestation == "Bronchitis ", "Non-IPD", ifelse(data_frame$Clinical_manifestation == "Other" | data_frame$Clinical_manifestation == "Joint fluid/pus", "Unknown", "IPD"))
+
+## Add columns for each vaccine individually "Y" or "N" depending on if the serotype is covered by that vaccine
+data_frame$PCV10GSK <- ifelse(data_frame$Serotype == "1" | data_frame$Serotype == "5" | data_frame$Serotype == "6B" | data_frame$Serotype == "7F" | data_frame$Serotype == "9V" | data_frame$Serotype == "14" | data_frame$Serotype == "19F" | data_frame$Serotype == "23F" | data_frame$Serotype == "4" | data_frame$Serotype == "18C", "Y", "N")
+
+data_frame$PCV10SII <- ifelse(data_frame$Serotype == "1" | data_frame$Serotype == "5" | data_frame$Serotype == "6B" | data_frame$Serotype == "7F" | data_frame$Serotype == "9V" | data_frame$Serotype == "14" | data_frame$Serotype == "19F" | data_frame$Serotype == "23F" | data_frame$Serotype == "6A" | data_frame$Serotype == "19A", "Y", "N")
+
+data_frame$PCV13 <- ifelse(data_frame$Serotype == "1" | data_frame$Serotype == "5" | data_frame$Serotype == "6B" | data_frame$Serotype == "7F" | data_frame$Serotype == "9V" | data_frame$Serotype == "14" | data_frame$Serotype == "19F" | data_frame$Serotype == "23F" | data_frame$Serotype == "6A" | data_frame$Serotype == "19A" | data_frame$Serotype == "4" | data_frame$Serotype == "3" | data_frame$Serotype == "18C", "Y", "N")
+
+# Add a pattern based on IPD or non-IPD status
+data_frame$pattern <- ifelse(data_frame$Type == "NVT", "stripe", "none")
+
+# Create an object to hold all of the serotype colours 
+filled_colours <- data_frame$Serotype__colour
+names(filled_colours) <- data_frame$Serotype
+
+# Colours for the NVT, PCV7, PCV10, and PCV13 vaccine types
+colours = list(
+     Type = c("#118ab2", "#ced4da", "#2c6e49", "#ffd166", "#c1121f")
+     )
+
+```
+
+
+## Generate Plots
+Here, we'll be making the plots and figures used within the paper
+```{r plots}
+## Plot showing the counts of each GPSC, coloured by whether the serotype is NVT or VT (Figure 1A)
+GPSC_Plot <- ggplot(data_frame, aes(x = forcats::fct_infreq(GPSC), y = ..count.., fill = Type)) + geom_bar() + theme_minimal() + coord_trans(y="sqrt") + theme(text = element_text(size = 15), axis.text.x = element_text(angle = 80, hjust = 1)) + xlab("GPSC") + ylab("Count") + scale_fill_manual(values = colours$Type)
+
+## Serotypes, coloured by whether the serotype is NVT or VT (Figure)
+Serotype_Plot <- ggplot(data_frame, aes(x = forcats::fct_infreq(Serotype), y = ..count.., fill = Type)) + geom_bar() + theme_minimal() + coord_trans(y="sqrt") + theme(text = element_text(size = 15), axis.text.x = element_text(angle = 80, hjust = 1)) + xlab("Serotype") + ylab("Count") + scale_fill_manual(values = colours$Type)
+
+## Filter the dataset into IPD and non-IPD
+IPD <- filter(data_frame, data_frame$Category == "IPD")
+nonIPD <- filter(data_frame, data_frame$Category == "Non-IPD")
+
+## Plot to show the proportion of IPD cases caused by a particular GPSC/Serotype (Figure 2A)
+IPD_Plot <- ggplot(IPD, aes(x = forcats::fct_infreq(GPSC), y = (..count..)/139, fill = Serotype, pattern = Type)) + geom_bar_pattern(pattern_density = 0.1, pattern_spacing = 0.02, pattern_colour = "grey90") + scale_fill_manual(values = filled_colours, guide = "none") + theme_minimal() + coord_trans(y="sqrt") + theme(axis.text.x = element_text(angle = 80, hjust = 1)) + xlab("GPSC") + ylab("Proportion of IPD Cases") + ylim(0, 0.8) + scale_color_manual(values = colours$Type, guide = "none") + scale_pattern_manual(name = "Type", values = c("PCV10 (GSK) and PCV13" = "none", "All" = "none", "PCV10 (SII) and PCV13" = "none", "PCV10 (SII) and PCV13" = "none", "PCV13 Only" = "stripe"), guide = "none") 
+
+## Plot to show the proportion of non-IPD cases caused by a particular GPSC/Serotype (Figure 2B)
+nonIPD_Plot <- ggplot(nonIPD, aes(x = forcats::fct_infreq(GPSC), y = (..count..)/271, fill = Serotype, pattern = Type)) + geom_bar_pattern(pattern_density = 0.1, pattern_spacing = 0.02, pattern_colour = "grey90") + scale_fill_manual(values = filled_colours, guide = "none") + theme_minimal() + coord_trans(y="sqrt") + theme(axis.text.x = element_text(angle = 80, hjust = 1)) + xlab("GPSC") + ylab("Proportion of Non-IPD Cases") + ylim(0, 0.8) + scale_color_manual(values = colours$Type, guide = "none") + scale_pattern_manual(name = "Type", values = c("PCV10 (GSK) and PCV13" = "none", "All" = "none", "PCV10 (SII) and PCV13" = "none", "PCV10 (SII) and PCV13" = "none", "PCV13 Only" = "stripe"), guide = "none") 
+```
+
+## AMR
+Next, we're going to investigate the number of antibiotics each isolate is resistant to. Also investigates the AMR of the NVT GPSCs.   
+``` {r AMR}
+## Subset the AMR data to only include the antibiotics we are interested in 
+AMR_data <- subset(data_frame, select=c("Public_name", "AMO_Res", "CFT_Res.Meningital.", "TAX_Res.Meningital.", "CFX_Res", "MER_Res", "PEN_Res.Meningital.", "CHL_Res", "CLI_Res", "COT_Res", "DOX_Res", "ERY_Res", "TET_Res"))
+
+## Function to count the number of antibiotic classes each isolate is resistant to. 
+count_R <- function(row) {
+  sum(row == "R" | row == "I")
+}
+
+## Apply the function to each row to produce a table of counts
+Resistance_Counts <- subset(data_frame, select=c("Public_name"))
+Resistance_Counts$ResistanceCount<- apply(AMR_data, 1, count_R)
+
+## Now we have a table showing how many antibiotics each isolate is resistant to. MDR is defined as >=3, so now we count number of samples >=3. I find that there are 2 samples that are resistant to less than 3 antibiotics. 
+Number_MDR <- count(Resistance_Counts, Resistance_Counts$ResistanceCount < 3)
+
+## Merge the counts with our dataset based on the public name
+data_frame <- full_join(data_frame, Resistance_Counts, by = "Public_name")
+
+## Next, we'll investigate the GPSC lineages with a mix of VT and NVT serotypes
+GPSC_Mix <- filter(data_frame, data_frame$GPSC == "5" | data_frame$GPSC == "10" | data_frame$GPSC == "107" | data_frame$GPSC == "230")
+GPSC_Mix_Resistance <- count(GPSC_Mix, GPSC_Mix$ResistanceCount)
+colnames(GPSC_Mix_Resistance)[1] <- "Number of Antibiotics that the Isolate is Resistant to"
+colnames(GPSC_Mix_Resistance)[2] <- "Isolate Count"
+
+## Same for the lineages that only express NVTs
+GPSC_NVT <- filter(data_frame, data_frame$GPSC == "152" | data_frame$GPSC == "856" | data_frame$GPSC == "69" | data_frame$GPSC == "158" | data_frame$GPSC == "186" | data_frame$GPSC == "215" | data_frame$GPSC == "224" | data_frame$GPSC == "45")
+GPSC_NVT_Resistance <- count(GPSC_NVT, GPSC_NVT$ResistanceCount)
+colnames(GPSC_NVT_Resistance)[1] <- "Number of Antibiotics that the Isolate is Resistant to"
+colnames(GPSC_NVT_Resistance)[2] <- "Isolate Count"
+
+# Specific checks for the resistance to meropenem due to carbapenem resistance in S. pneumoniae recently being highlighted in a paper by the GBD 2021 Antimicrobial Resistance Collaborators in 2024
+MER_nonSus <- count(data_frame, data_frame$MER_Res != "S")
+
+CHL_nonSus <- count(data_frame, data_frame$CHL_Res != "S")
+```
+
+
+Now we're going to count the number of isolates resistant to each antibiotic and create a table for the manuscript showing this (Table 1)
+```{r AMR_Table}
+# Function to count occurrences of "R" or "I" in each column, to count how many isolates in the dataset are resistant to each antibiotic.
+count_c <- function(column) {
+  sum(column == "R" | column == "I")
+}
+
+# Apply the function to each column and create a new data frame
+Antibiotic_Count <- sapply(AMR_data, count_c)
+
+# Convert to data frame and add a percentages column (percentage of isolates with resistance to each antibiotic) (Table 1)
+Antibiotic_Count <- as.data.frame(t(Antibiotic_Count))
+Antibiotic_Count <- data.frame(t(Antibiotic_Count[-1]))
+colnames(Antibiotic_Count)[1] <- "Count"
+Antibiotic_Count$Percentage <- round(((Antibiotic_Count$Count / 418) * 100), 1)
+
+```
+
+## Statistical Analysis
+This is the analysis to carry out significance tests for differences in GPSC or Serotype between IPD cases and non-IPD
+```{r generate_pair_frequency_table_1}
+## Packages
+install.packages("epiR")
+library(epiR)
+install.packages("pwr")
+library(pwr)
+
+## Filter for samples from between 2014-2018 to avoid the sampling change
+IPD <- filter(IPD, IPD$Year < 2018)
+nonIPD <- filter(nonIPD, nonIPD$Year < 2018)
+
+## Count number of samples in each GPSC for IPD and non-IPD
+IPD_GPSC <- count(IPD, IPD$GPSC)
+nonIPD_GPSC <- count(nonIPD, nonIPD$GPSC)
+
+## Rename the columns to be sensible
+colnames(IPD_GPSC)[1] <- "GPSC"
+colnames(nonIPD_GPSC)[1] <- "GPSC"
+colnames(IPD_GPSC)[2] <- "IPD_Freq"
+colnames(nonIPD_GPSC)[2] <- "Non-IPD_Freq"
+
+## Merge into a single dataframe
+joined_GPSC <- full_join(IPD_GPSC, nonIPD_GPSC, by = "GPSC")
+joined_GPSC <- joined_GPSC %>% replace(is.na(.), 0)
+
+# Calculate the proportion of IPD cases or nonIPD cases caused by each GPSC
+joined_GPSC$IPD_Proportion <- joined_GPSC$IPD_Freq / sum(IPD_GPSC$`IPD_Freq`)
+joined_GPSC$nonIPD_Proportion <- joined_GPSC$`Non-IPD_Freq` / sum(nonIPD_GPSC$`Non-IPD_Freq`)
+
+## Calculated the number of samples needed for a power level of above 80%
+power_GPSC <- subset(joined_GPSC, select=c("IPD_Proportion", "nonIPD_Proportion"))
+power_GPSC <- as.matrix(power_GPSC)
+pwr_GPSC <- pwr.chisq.test(w = ES.w2(power_GPSC), power = 0.8, df = 1, sig.level = 0.05)
+
+## Fishers Exact test to see if there is a significant difference in the GPSCs causing IPD vs nonIPD. Calculate and adjust the p value. Used a simulate p-value as the number of variables is so large, but with 500,000 bootstraps to make it as reliable and consistent as possible
+p_GPSC <- fisher.test(joined_GPSC$IPD_Freq, joined_GPSC$`Non-IPD_Freq`, simulate.p.value = TRUE, B = 500000)$p.value
+p_GPSC_adjust <- p.adjust(p_GPSC, "BH", n = nrow(joined_GPSC))
+
+## Count number of samples in each Serotype
+IPD_serotype <- count(IPD, IPD$Serotype)
+nonIPD_serotype <- count(nonIPD, nonIPD$Serotype)
+
+## Change the column names
+colnames(IPD_serotype)[1] <- "Serotype"
+colnames(nonIPD_serotype)[1] <- "Serotype"
+colnames(IPD_serotype)[2] <- "IPD_Freq"
+colnames(nonIPD_serotype)[2] <- "Non-IPD_Freq"
+
+## Join the datasets
+joined_serotype <- full_join(IPD_serotype, nonIPD_serotype, by = "Serotype")
+joined_serotype <- joined_serotype %>% replace(is.na(.), 0)
+
+## Calculate the proportion of IPD and nonIPD cases caused by each serotype
+joined_serotype$IPD_Proportion <- joined_serotype$IPD_Freq / sum(IPD_serotype$`IPD_Freq`)
+joined_serotype$nonIPD_Proportion <- joined_serotype$`Non-IPD_Freq` / sum(nonIPD_serotype$`Non-IPD_Freq`)
+
+## Work out n needed for 80% power
+power_serotype <- subset(joined_serotype, select=c("IPD_Proportion", "nonIPD_Proportion"))
+power_serotype <- as.matrix(power_serotype)
+pwr_serotype <- pwr.chisq.test(w = ES.w2(power_serotype), power = 0.8, df = 1, sig.level = 0.05)
+
+## Fishers Exact test to see if there is a significant difference in the serotypes causing IPD vs nonIPD. Calculate and adjust the p value. Used a simulate p-value as the number of variables is so large, but with 500,000 bootstraps to make it as reliable and consistent as possible
+p_serotype <- fisher.test(joined_serotype$IPD_Freq, joined_serotype$`Non-IPD_Freq`, simulate.p.value = TRUE, B = 500000)$p.value
+p_serotype_adjust <- p.adjust(p_serotype, "BH", n = nrow(joined_serotype))
+```
+
+Next, we carry out significance tests between the different vaccines for IPD vs. non-IPD (Answering the question if one vaccine would be superior for IPD specifically)
+```{IPD and Vaccines Statistics}
+## Filter to only include pre-2018 due to sampling limitations
+pre2018 <- filter(data_frame, data_frame$Year < 2018)
+
+## Fisher's for coverage of PCV10 (GSK)
+GSK_p <- fisher.test(pre2018$PCV10GSK, pre2018$Category)
+GSK_p_adjust <- p.adjust(GSK_p$p.value, "BH", n = nrow(pre2018))
+
+## Fisher's for coverage of PCV10 (SII)
+SII_p <- fisher.test(pre2018$PCV10SII, pre2018$Category)
+SII_p_adjust <- p.adjust(SII_p$p.value, "BH", n = nrow(pre2018))
+
+## Fisher's for coverage of PCV13
+PCV13_p <- fisher.test(pre2018$PCV13, pre2018$Category)
+PCV13_p_adjust <- p.adjust(PCV13_p$p.value, "BH", n = nrow(pre2018))
+
+```
+
+Finally, statistical analysis to investigate the AMR between IPD and non-IPD cases
+```{Specific AMR Statistics}
+## Perform Fisher's tests on each antibiotic for IPD and non-IPD
+AMO_p <- fisher.test(data_frame$Category, data_frame$AMO_Res)
+COT_p <- fisher.test(data_frame$Category, data_frame$COT_Res)
+CFT_p <- fisher.test(data_frame$Category, data_frame$CFT_Res.Meningital.)
+TAX_p <- fisher.test(data_frame$Category, data_frame$TAX_Res.Meningital.)
+DOX_p <- fisher.test(data_frame$Category, data_frame$DOX_Res)
+MER_p <- fisher.test(data_frame$Category, data_frame$MER_Res)
+TET_p <- fisher.test(data_frame$Category, data_frame$TET_Res)
+CFX_p <- fisher.test(data_frame$Category, data_frame$CFX_Res)
+PEN_p <- fisher.test(data_frame$Category, data_frame$PEN_Res.Meningital.)
+CLI_p <- fisher.test(data_frame$Category, data_frame$CLI_Res)
+ERY_p <- fisher.test(data_frame$Category, data_frame$ERY_Res)
+CHL_p <- fisher.test(data_frame$Category, data_frame$CHL_MIC)
+
+# Adjust them using BH
+AMO_p_adj <- p.adjust(AMO_p$p.value, "BH", n = 418)
+COT_p_adj <- p.adjust(COT_p$p.value, "BH", n = 418)
+CFT_p_adj <- p.adjust(CFT_p$p.value, "BH", n = 418)
+TAX_p_adj <- p.adjust(TAX_p$p.value, "BH", n = 418)
+DOX_p_adj <- p.adjust(DOX_p$p.value, "BH", n = 418)
+MER_p_adj <- p.adjust(MER_p$p.value, "BH", n = 418)
+TET_p_adj <- p.adjust(TET_p$p.value, "BH", n = 418)
+CFX_p_adj <- p.adjust(CFX_p$p.value, "BH", n = 418)
+PEN_p_adj <- p.adjust(PEN_p$p.value, "BH", n = 418)
+CLI_p_adj <- p.adjust(CLI_p$p.value, "BH", n = 418)
+ERY_p_adj <- p.adjust(ERY_p$p.value, "BH", n = 418)
+CHL_p_adj <- p.adjust(CHL_p$p.value, "BH", n = 418)
+
+
+```
